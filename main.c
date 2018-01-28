@@ -1,5 +1,6 @@
 #include "main.h"
 #include <unistd.h> /*AM: this is for the purposes of parsing command line arguments through getopt*/
+#include <stdlib.h>
 
 
 // void *fnC()
@@ -15,6 +16,8 @@
 pthread_mutex_t count_mutex;
 pthread_spinlock_t count_spin;
 my_spinlock_t count_myspin;
+my_mutex_t count_mymutex;
+my_queuelock_t count_myqueuelock;
 
 
 //int pshared;
@@ -44,6 +47,7 @@ void *pthreadMutexTest()
 		for(k=0;k<workInsideCS;k++)/*How much work is done inside the CriticalSection*/
 		{
 			c++;
+
 		}
 		pthread_mutex_unlock(&count_mutex);    
 	
@@ -125,6 +129,7 @@ void *pthreadMySpinTTASTest()
 		for(k=0;k<workInsideCS;k++)//How much work is done inside the CriticalSection
 		{
 			c++;
+			//printf("counts %i\n", c);
 		}
 		my_spinlock_unlock(&count_myspin);    
 	
@@ -132,172 +137,316 @@ void *pthreadMySpinTTASTest()
 
 
 }
-/*AM end*/
+
+
+void *pthreadMyMutexTest()
+{
+    int i;
+	int j;
+	int k;
+	int localCount = 0;
+	
+    for(i=0;i<numItterations;i++)
+    {
+
+		for(j=0;j<workOutsideCS;j++)//How much work is done outside the CriticalSection
+		{
+			localCount++;
+		}
+		
+		my_mutex_lock(&count_mymutex);
+		for(k=0;k<workInsideCS;k++)//How much work is done inside the CriticalSection
+		{
+			c++;
+			//printf("counts %i\n", c);
+		}
+		my_mutex_unlock(&count_mymutex);    
+	
+    }   
+
+
+}
+
+
+
+void *pthreadMyQueueTest()
+{
+    int i;
+	int j;
+	int k;
+	int localCount = 0;
+	
+    for(i=0;i<numItterations;i++)
+    {
+
+		for(j=0;j<workOutsideCS;j++)//How much work is done outside the CriticalSection
+		{
+			localCount++;
+		}
+		my_queuelock_lock(&count_myqueuelock);
+		for(k=0;k<workInsideCS;k++)//How much work is done inside the CriticalSection
+		{
+			c++;
+		}
+		my_queuelock_unlock(&count_myqueuelock);    
+	
+    }   
+
+
+}
+
+
 
 int runTest(int testID)
 {
 
-/*You must create all data structures and threads for you experiments*/
+	/*You must create all data structures and threads for you experiments*/
 
-if (testID == 0 || testID == 1 ) /*Pthread Mutex*/
-{
-	pthread_mutex_init(&count_mutex, 0);
-	c=0;
-	struct timespec start;
-	struct timespec stop;
-	unsigned long long result; //64 bit integer
-
-	pthread_t *threads = (pthread_t* )malloc(sizeof(pthread_t)*numThreads);	
-	int i;
-	int rt;
-
-	clock_gettime(CLOCK_MONOTONIC, &start);
-	for(i=0;i<numThreads;i++)
+	if (testID == 0 || testID == 1 ) /*Pthread Mutex*/
 	{
-	
-	 if( rt=(pthread_create( threads+i, NULL, &pthreadMutexTest, NULL)) )
+		pthread_mutex_init(&count_mutex, 0);
+		c=0;
+		struct timespec start;
+		struct timespec stop;
+		unsigned long long result; //64 bit integer
+
+		pthread_t *threads = (pthread_t* )malloc(sizeof(pthread_t)*numThreads);	
+		int i;
+		int rt;
+
+		clock_gettime(CLOCK_MONOTONIC, &start);
+		for(i=0;i<numThreads;i++)
+		{
+		
+			if( rt=(pthread_create( threads+i, NULL, &pthreadMutexTest, NULL)) )
+			{
+				printf("Thread creation failed: %d\n", rt);
+				return -1;	
+			}
+			
+		}
+		
+		for(i=0;i<numThreads;i++) //Wait for all threads to finish
+		{
+			 pthread_join(threads[i], NULL);
+		}
+		clock_gettime(CLOCK_MONOTONIC, &stop);
+
+		printf("Threaded Run Pthread (Mutex) Total Count: %d\n", c);
+		result=timespecDiff(&stop,&start);
+		printf("Pthread Mutex time(ms): %llu\n",result/1000000);
+
+	}
+
+	if(testID == 0 || testID == 2) /*Pthread Spinlock*/
 	{
-		printf("Thread creation failed: %d\n", rt);
-		return -1;	
-	}
-	
-	}
-	
-	for(i=0;i<numThreads;i++) //Wait for all threads to finish
-	{
-		 pthread_join(threads[i], NULL);
-	}
-	clock_gettime(CLOCK_MONOTONIC, &stop);
-
-	printf("Threaded Run Pthread (Spinlock) Total Count: %d\n", c);
-	result=timespecDiff(&stop,&start);
-	printf("Pthread Spinlock time(ms): %llu\n",result/1000000);
-
-}
-
-if(testID == 0 || testID == 2) /*Pthread Spinlock*/
-{
-/*Pthread Spinlock goes here*/
-	pthread_spin_init(&count_spin, 0);
-	c=0;
-	struct timespec start;
-	struct timespec stop;
-	unsigned long long result; //64 bit integer
-
-	pthread_t *threads = (pthread_t* )malloc(sizeof(pthread_t)*numThreads);	
-	int i;
-	int rt;
-
-	clock_gettime(CLOCK_MONOTONIC, &start);
-
-	
-
-	for(i=0;i<numThreads;i++)
-	{
-	
-	 if( rt=(pthread_create( threads+i, NULL, &pthreadSpinTest, NULL)) )
-	{
-		printf("Thread creation failed: %d\n", rt);
-		return -1;	
-	}
-	
-	}
-	
-	for(i=0;i<numThreads;i++) //Wait for all threads to finish
-	{
-		 pthread_join(threads[i], NULL);
-	}
-	clock_gettime(CLOCK_MONOTONIC, &stop);
-
-	printf("Threaded Run Pthread (Spin) Total Count: %d\n", c);
-	result=timespecDiff(&stop,&start);
-	printf("Pthread Spin time(ms): %llu\n",result/1000000);
-}
-
-if(testID == 0 || testID == 3) /*MySpinlockTAS*/
-{
-/* mySpinlock TAS goes here*/
 	/*Pthread Spinlock goes here*/
-	my_spinlock_init(&count_myspin);
-	c=0;
-	struct timespec start;
-	struct timespec stop;
-	unsigned long long result; //64 bit integer
+		pthread_spin_init(&count_spin, 0);
+		c=0;
+		struct timespec start;
+		struct timespec stop;
+		unsigned long long result; //64 bit integer
 
-	pthread_t *threads = (pthread_t* )malloc(sizeof(pthread_t)*numThreads);	
-	int i;
-	int rt;
+		pthread_t *threads = (pthread_t* )malloc(sizeof(pthread_t)*numThreads);	
+		int i;
+		int rt;
 
-	clock_gettime(CLOCK_MONOTONIC, &start);
+		clock_gettime(CLOCK_MONOTONIC, &start);
 
-	
+		
 
-	for(i=0;i<numThreads;i++)
-	{
-	
-	 if( rt=(pthread_create( threads+i, NULL, &pthreadMySpinTASTest, NULL)) )
-	{
-		printf("Thread creation failed: %d\n", rt);
-		return -1;	
+		for(i=0;i<numThreads;i++)
+		{
+		
+		 if( rt=(pthread_create( threads+i, NULL, &pthreadSpinTest, NULL)) )
+		{
+			printf("Thread creation failed: %d\n", rt);
+			return -1;	
+		}
+		
+		}
+		
+		for(i=0;i<numThreads;i++) //Wait for all threads to finish
+		{
+			 pthread_join(threads[i], NULL);
+		}
+		clock_gettime(CLOCK_MONOTONIC, &stop);
+
+		printf("Threaded Run Pthread (Spin) Total Count: %d\n", c);
+		result=timespecDiff(&stop,&start);
+		printf("Pthread Spin time(ms): %llu\n",result/1000000);
 	}
-	
-	}
-	
-	for(i=0;i<numThreads;i++) //Wait for all threads to finish
+
+	if(testID == 0 || testID == 3) /*MySpinlockTAS*/
 	{
-		 pthread_join(threads[i], NULL);
+	/* mySpinlock TAS goes here*/
+		/*Pthread Spinlock goes here*/
+		my_spinlock_init(&count_myspin);
+		c=0;
+		struct timespec start;
+		struct timespec stop;
+		unsigned long long result; //64 bit integer
+
+		pthread_t *threads = (pthread_t* )malloc(sizeof(pthread_t)*numThreads);	
+		int i;
+		int rt;
+
+		clock_gettime(CLOCK_MONOTONIC, &start);
+
+		
+
+		for(i=0;i<numThreads;i++)
+		{
+		
+		 if( rt=(pthread_create( threads+i, NULL, &pthreadMySpinTASTest, NULL)) )
+		{
+			printf("Thread creation failed: %d\n", rt);
+			return -1;	
+		}
+		
+		}
+		
+		for(i=0;i<numThreads;i++) //Wait for all threads to finish
+		{
+			 pthread_join(threads[i], NULL);
+		}
+		clock_gettime(CLOCK_MONOTONIC, &stop);
+
+		printf("Threaded Run  MySpinlockTAS Total Count: %d\n", c);
+		result=timespecDiff(&stop,&start);
+		printf("MySpinlockTAS time(ms): %llu\n",result/1000000);
 	}
-	clock_gettime(CLOCK_MONOTONIC, &stop);
 
-	printf("Threaded Run  MySpinlockTAS Total Count: %d\n", c);
-	result=timespecDiff(&stop,&start);
-	printf("MySpinlockTAS time(ms): %llu\n",result/1000000);
-}
-
-if(testID == 0 || testID == 4) /*MySpinlockTTAS*/
-{
-/* mySpinlock TAS goes here*/
-	/*Pthread Spinlock goes here*/
-	my_spinlock_init(&count_myspin);
-	c=0;
-	struct timespec start;
-	struct timespec stop;
-	unsigned long long result; //64 bit integer
-
-	pthread_t *threads = (pthread_t* )malloc(sizeof(pthread_t)*numThreads);	
-	int i;
-	int rt;
-
-	clock_gettime(CLOCK_MONOTONIC, &start);
-
-	
-
-	for(i=0;i<numThreads;i++)
+	if(testID == 0 || testID == 4) /*MySpinlockTTAS*/
 	{
-	
-	 if( rt=(pthread_create( threads+i, NULL, &pthreadMySpinTTASTest, NULL)) )
-	{
-		printf("Thread creation failed: %d\n", rt);
-		return -1;	
-	}
-	
-	}
-	
-	for(i=0;i<numThreads;i++) //Wait for all threads to finish
-	{
-		 pthread_join(threads[i], NULL);
-	}
-	clock_gettime(CLOCK_MONOTONIC, &stop);
+	/* mySpinlock TAS goes here*/
+		/*Pthread Spinlock goes here*/
+		my_spinlock_init(&count_myspin);
+		c=0;
+		struct timespec start;
+		struct timespec stop;
+		unsigned long long result; //64 bit integer
 
-	printf("Threaded Run MySpinlockTTAS Total Count: %d\n", c);
-	result=timespecDiff(&stop,&start);
-	printf("MySpinlockTTAS time(ms): %llu\n",result/1000000);
-}
+		pthread_t *threads = (pthread_t* )malloc(sizeof(pthread_t)*numThreads);	
+		int i;
+		int rt;
 
-/*....you must implement the other tests....*/
+		clock_gettime(CLOCK_MONOTONIC, &start);
+
+		
+
+		for(i=0;i<numThreads;i++)
+		{
+		
+		 if( rt=(pthread_create( threads+i, NULL, &pthreadMySpinTTASTest, NULL)) )
+		{
+			printf("Thread creation failed: %d\n", rt);
+			return -1;	
+		}
+		
+		}
+		
+		for(i=0;i<numThreads;i++) //Wait for all threads to finish
+		{
+			 pthread_join(threads[i], NULL);
+		}
+		clock_gettime(CLOCK_MONOTONIC, &stop);
+
+		printf("Threaded Run MySpinlockTTAS Total Count: %d\n", c);
+		result=timespecDiff(&stop,&start);
+		printf("MySpinlockTTAS time(ms): %llu\n",result/1000000);
+	}
+
+	if(testID == 0 || testID == 5) /*MySpinlockTTAS*/
+	{
+	/* mySpinlock TAS goes here*/
+		/*Pthread Spinlock goes here*/
+		my_mutex_init(&count_mymutex);
+		printf("mutex init %i\n", count_mymutex.lock);
+		c=0;
+		struct timespec start;
+		struct timespec stop;
+		unsigned long long result; //64 bit integer
+
+		pthread_t *threads = (pthread_t* )malloc(sizeof(pthread_t)*numThreads);	
+		int i;
+		int rt;
+
+		clock_gettime(CLOCK_MONOTONIC, &start);
+
+		
+
+		for(i=0;i<numThreads;i++)
+		{
+		
+			if( rt=(pthread_create( threads+i, NULL, &pthreadMyMutexTest, NULL)) )
+			{
+				printf("Thread creation failed: %d\n", rt);
+				return -1;	
+			}
+		
+		}
+		
+		for(i=0;i<numThreads;i++) //Wait for all threads to finish
+		{
+			 pthread_join(threads[i], NULL);
+		}
+		clock_gettime(CLOCK_MONOTONIC, &stop);
+
+		printf("Threaded Run MyMutex Total Count: %d\n", c);
+		result=timespecDiff(&stop,&start);
+		printf("MyMutex time(ms): %llu\n",result/1000000);
+	}
+
+
+	if(testID == 0 || testID == 6) /*MySQueueLock*/
+	{
+	/* mySpinlock TAS goes here*/
+		/*Pthread Spinlock goes here*/
+		my_queuelock_init(&count_myqueuelock);
+		// printf("nowServing,nextTicket: %i%i\n", count_myqueuelock.nowServing,count_myqueuelock.nextTicket);
+		c=0;
+		struct timespec start;
+		struct timespec stop;
+		unsigned long long result; //64 bit integer
+
+		pthread_t *threads = (pthread_t* )malloc(sizeof(pthread_t)*numThreads);	
+		int i;
+		int rt;
+
+		clock_gettime(CLOCK_MONOTONIC, &start);
+
+		
+
+		for(i=0;i<numThreads;i++)
+		{
+		
+			if( rt=(pthread_create( threads+i, NULL, &pthreadMyQueueTest, NULL)) )
+			{
+				printf("Thread creation failed: %d\n", rt);
+				return -1;	
+			}
+		
+		}
+		
+		for(i=0;i<numThreads;i++) //Wait for all threads to finish
+		{
+			 pthread_join(threads[i], NULL);
+		}
+		clock_gettime(CLOCK_MONOTONIC, &stop);
+
+		printf("Threaded Run myQueueLock Total Count: %d\n", c);
+		result=timespecDiff(&stop,&start);
+		printf("myQueueLock time(ms): %llu\n",result/1000000);
+	}
+
+
+	/*....you must implement the other tests....*/
 
 	return 0;
 }
+
+
 
 int testAndSetExample()
 {
@@ -334,12 +483,12 @@ int processInput(int argc, char *argv[])
        			default:
             		      
             		      printf("Usage of: %s -t #threads -i #Itterations -o #OperationsOutsideCS -c #OperationsInsideCS -d testid\n", argv[0]);
-	                      printf("testid: 0=all, 1=pthreadMutex, 2=pthreadSpinlock, 3=mySpinLockTAS, 4=mySpinLockTTAS, 5=myMutexTAS, 6=myQueueLock, \n");	
+	                      printf("testid: 0=all, 1=pthreadMutex, 2=pthreadSpinlock, 3=mySpinLockTAS, 4=mySpinLockTTAS, 5=myMutexTAS, 6=myQueueLock, \n");
+
            }              
         }
 
 	}
-
 
 	return 0;
 }

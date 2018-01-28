@@ -11,7 +11,7 @@ int numItterations;
 int workOutsideCS;
 int workInsideCS;
 int testID;
-pthread_mutex_t count_mutex;
+// pthread_mutex_t count_mutex;
 
 
 
